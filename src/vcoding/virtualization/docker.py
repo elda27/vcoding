@@ -162,6 +162,7 @@ CMD ["/usr/sbin/sshd", "-D"]
             image=image,
             name=self.container_name,
             detach=True,
+            auto_remove=True,
             ports={"22/tcp": host_port},
             volumes={
                 str(self._config.temp_dir): {
