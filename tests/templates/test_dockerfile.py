@@ -172,7 +172,7 @@ RUN pip install -r requirements.txt
         assert "PermitRootLogin no" in content
         assert "PasswordAuthentication no" in content
         assert "PubkeyAuthentication yes" in content
-        assert "mkdir /var/run/sshd" in content
+        assert "mkdir -p /var/run/sshd" in content
 
     def test_multiple_languages(self) -> None:
         """Test adding multiple languages."""
