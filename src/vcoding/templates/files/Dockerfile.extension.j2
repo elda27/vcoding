@@ -1,0 +1,45 @@
+
+# ========================================
+# vcoding extensions
+# ========================================
+
+# Install SSH server
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    sudo \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH
+RUN mkdir -p /var/run/sshd
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+
+# Create vcoding user if not exists
+RUN id -u {{ user }} &>/dev/null || useradd -m -s /bin/bash {{ user }}
+RUN echo "{{ user }} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Setup SSH directory for user
+RUN mkdir -p /home/{{ user }}/.ssh && \
+    chmod 700 /home/{{ user }}/.ssh && \
+    chown -R {{ user }}:{{ user }} /home/{{ user }}/.ssh
+
+{% if install_claudecode %}
+# Install Node.js (required for Claude Code CLI)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+{% endif %}
+
+# Ensure workspace directory exists
+RUN mkdir -p {{ work_dir }} && \
+    chown -R {{ user }}:{{ user }} {{ work_dir }}
+
+# Expose SSH port
+EXPOSE 22
+
+# Default command to start SSH server
+CMD ["/usr/sbin/sshd", "-D"]

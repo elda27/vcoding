@@ -1,0 +1,73 @@
+FROM {{ base_image }}
+
+# Install base packages
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    sudo \
+    git \
+    curl \
+    wget \
+    vim \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH
+RUN mkdir /var/run/sshd
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+
+# Create user
+RUN useradd -m -s /bin/bash {{ user }} && \
+    echo "{{ user }} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Setup SSH directory
+RUN mkdir -p /home/{{ user }}/.ssh && \
+    chmod 700 /home/{{ user }}/.ssh && \
+    chown -R {{ user }}:{{ user }} /home/{{ user }}/.ssh
+
+{% if language_setup %}
+# Language-specific setup
+{{ language_setup }}
+{% endif %}
+
+{% if additional_packages %}
+# Additional packages
+RUN apt-get update && apt-get install -y \
+{% for pkg in additional_packages %}
+    {{ pkg }}{% if not loop.last %} \{% endif %}
+
+{% endfor %}
+    && rm -rf /var/lib/apt/lists/*
+{% endif %}
+
+{% if custom_commands %}
+# Custom commands
+{% for cmd in custom_commands %}
+RUN {{ cmd }}
+{% endfor %}
+{% endif %}
+
+{% if install_claudecode %}
+# Install Node.js (required for Claude Code CLI)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Claude Code CLI
+RUN npm install -g @anthropic-ai/claude-code
+{% endif %}
+
+# Create workspace directory
+RUN mkdir -p {{ work_dir }} && \
+    chown -R {{ user }}:{{ user }} {{ work_dir }}
+
+WORKDIR {{ work_dir }}
+
+# Expose SSH port
+EXPOSE 22
+
+# Start SSH server
+CMD ["/usr/sbin/sshd", "-D"]

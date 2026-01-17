@@ -1,0 +1,5 @@
+# Install Go
+RUN curl -fsSL https://go.dev/dl/go1.22.0.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+ENV PATH=$PATH:/usr/local/go/bin
+ENV GOPATH=/home/{{ user }}/go
+ENV PATH=$PATH:$GOPATH/bin

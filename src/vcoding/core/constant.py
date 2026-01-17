@@ -1,0 +1,1 @@
+VCODING_DOCKER_OS_DEFAULT = "ubuntu:24.04"
