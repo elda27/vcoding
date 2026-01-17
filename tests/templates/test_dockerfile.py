@@ -1,6 +1,5 @@
 """Tests for vcoding.templates.dockerfile module."""
 
-
 from vcoding.core.constant import VCODING_DOCKER_OS_DEFAULT
 from vcoding.templates.dockerfile import DockerfileTemplate
 
