@@ -108,6 +108,7 @@ class TestConfig:
         config = Config.from_dict(
             {
                 "virtualization_type": "docker",
+                "target_type": "directory",
                 "docker": {
                     "base_image": "python:3.12",
                     "container_name_prefix": "test",
@@ -124,7 +125,7 @@ class TestConfig:
         workspace_config = config.to_workspace_config("test-ws", temp_dir)
 
         assert workspace_config.name == "test-ws"
-        assert workspace_config.host_project_path == temp_dir
+        assert workspace_config.target_path == temp_dir
         assert workspace_config.virtualization_type == VirtualizationType.DOCKER
         assert workspace_config.docker.base_image == "python:3.12"
         assert workspace_config.docker.container_name_prefix == "test"

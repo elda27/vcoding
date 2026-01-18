@@ -25,7 +25,14 @@ class ContainerState(Enum):
     ERROR = "error"
 
 
-class SSHConfig(BaseModel):
+class TargetType(Enum):
+    """Target type for workspace."""
+
+    FILE = "file"
+    DIRECTORY = "directory"
+
+
+class SshConfig(BaseModel):
     """SSH connection configuration."""
 
     host: str = "localhost"
@@ -75,18 +82,48 @@ class WorkspaceConfig(BaseModel):
     """Workspace configuration."""
 
     name: str
-    host_project_path: Path
+    target_path: Path
+    target_type: TargetType = TargetType.DIRECTORY
     virtualization_type: VirtualizationType = VirtualizationType.DOCKER
     docker: DockerConfig = Field(default_factory=DockerConfig)
-    ssh: SSHConfig = Field(default_factory=SSHConfig)
+    ssh: SshConfig = Field(default_factory=SshConfig)
     git: GitConfig = Field(default_factory=GitConfig)
-    temp_dir: Path | None = None
+    workspace_dir: Path | None = None
 
     model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
-    def set_temp_dir(self) -> "WorkspaceConfig":
-        """Set default temp_dir if not provided."""
-        if self.temp_dir is None:
-            self.temp_dir = self.host_project_path / ".vcoding"
+    def set_workspace_dir(self) -> "WorkspaceConfig":
+        """Set workspace_dir based on target_path if not provided."""
+        if self.workspace_dir is None:
+            from vcoding.core.paths import get_workspace_dir
+
+            self.workspace_dir = get_workspace_dir(self.target_path)
         return self
+
+    @property
+    def temp_dir(self) -> Path:
+        """Get temporary directory."""
+        if self.workspace_dir is None:
+            from vcoding.core.paths import get_workspace_dir
+
+            return get_workspace_dir(self.target_path) / "temp"
+        return self.workspace_dir / "temp"
+
+    @property
+    def keys_dir(self) -> Path:
+        """Get SSH keys directory."""
+        if self.workspace_dir is None:
+            from vcoding.core.paths import get_workspace_dir
+
+            return get_workspace_dir(self.target_path) / "keys"
+        return self.workspace_dir / "keys"
+
+    @property
+    def logs_dir(self) -> Path:
+        """Get logs directory."""
+        if self.workspace_dir is None:
+            from vcoding.core.paths import get_workspace_dir
+
+            return get_workspace_dir(self.target_path) / "logs"
+        return self.workspace_dir / "logs"

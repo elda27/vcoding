@@ -4,7 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from vcoding.core.types import SSHConfig
+from vcoding.core.types import SshConfig
 
 
 class SSHClient:
@@ -34,7 +34,7 @@ class SSHClient:
         self._timeout = timeout
 
     @classmethod
-    def from_config(cls, config: SSHConfig, private_key_path: Path) -> "SSHClient":
+    def from_config(cls, config: SshConfig, private_key_path: Path) -> "SSHClient":
         """Create SSH client from configuration.
 
         Args:

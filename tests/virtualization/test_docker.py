@@ -22,7 +22,7 @@ class TestDockerBackend:
         """Create sample workspace config."""
         return WorkspaceConfig(
             name="test-workspace",
-            host_project_path=temp_dir,
+            target_path=temp_dir,
             virtualization_type=VirtualizationType.DOCKER,
             docker=DockerConfig(
                 base_image="python:3.11-slim",
@@ -308,11 +308,13 @@ class TestDockerBackendIntegration:
     @pytest.mark.skipif(not has_docker_daemon(), reason="Requires Docker daemon")
     def test_real_docker_workflow(self, temp_dir: Path) -> None:
         """Test real Docker workflow - requires Docker daemon."""
+        from docker.errors import APIError, NotFound
+
         from vcoding.virtualization.docker import DockerBackend
 
         config = WorkspaceConfig(
             name="integration-test",
-            host_project_path=temp_dir,
+            target_path=temp_dir,
             docker=DockerConfig(
                 base_image="python:3.11-slim",
             ),
@@ -341,6 +343,10 @@ class TestDockerBackendIntegration:
             assert "Python" in stdout
 
         finally:
-            # Cleanup
+            # Cleanup - container may be auto-removed after stop
             backend.stop(container_id)
-            backend.destroy(container_id)
+            try:
+                backend.destroy(container_id)
+            except (NotFound, APIError):
+                # Container may already be removed due to auto_remove=True
+                pass

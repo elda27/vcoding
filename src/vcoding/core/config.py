@@ -8,7 +8,8 @@ from vcoding.core.constant import VCODING_DOCKER_OS_DEFAULT
 from vcoding.core.types import (
     DockerConfig,
     GitConfig,
-    SSHConfig,
+    SshConfig,
+    TargetType,
     VirtualizationType,
     WorkspaceConfig,
 )
@@ -112,18 +113,21 @@ class Config:
             data = data[k]
         data[keys[-1]] = value
 
-    def to_workspace_config(self, name: str, project_path: Path) -> WorkspaceConfig:
+    def to_workspace_config(self, name: str, target_path: Path) -> WorkspaceConfig:
         """Convert configuration to WorkspaceConfig.
 
         Args:
             name: Workspace name.
-            project_path: Path to project directory.
+            target_path: Path to target file or directory.
 
         Returns:
             WorkspaceConfig instance.
         """
         virt_type_str = self.get("virtualization_type", "docker")
         virt_type = VirtualizationType(virt_type_str)
+
+        target_type_str = self.get("target_type", "directory")
+        target_type = TargetType(target_type_str)
 
         docker_data = self.get("docker", {})
         docker_config = DockerConfig(
@@ -140,7 +144,7 @@ class Config:
         )
 
         ssh_data = self.get("ssh", {})
-        ssh_config = SSHConfig(
+        ssh_config = SshConfig(
             host=ssh_data.get("host", "localhost"),
             port=ssh_data.get("port", 22),
             username=ssh_data.get("username", "vcoding"),
@@ -158,12 +162,15 @@ class Config:
 
         return WorkspaceConfig(
             name=name,
-            host_project_path=project_path,
+            target_path=target_path,
+            target_type=target_type,
             virtualization_type=virt_type,
             docker=docker_config,
             ssh=ssh_config,
             git=git_config,
-            temp_dir=Path(self.get("temp_dir")) if self.get("temp_dir") else None,
+            workspace_dir=(
+                Path(self.get("workspace_dir")) if self.get("workspace_dir") else None
+            ),
         )
 
     @property

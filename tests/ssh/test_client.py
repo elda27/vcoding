@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vcoding.core.types import SSHConfig
+from vcoding.core.types import SshConfig
 from vcoding.ssh.client import SSHClient
 
 
@@ -33,7 +33,7 @@ class TestSSHClient:
 
     def test_from_config(self, temp_dir: Path) -> None:
         """Test creating from SSHConfig."""
-        config = SSHConfig(
+        config = SshConfig(
             host="192.168.1.1",
             port=22,
             username="admin",

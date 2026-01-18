@@ -15,12 +15,13 @@ from vcoding.virtualization.base import VirtualizationBackend
 class ConcreteBackend(VirtualizationBackend):
     """Concrete implementation for testing."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: WorkspaceConfig | None = None) -> None:
         """Initialize with default config."""
-        config = WorkspaceConfig(
-            name="test",
-            host_project_path=Path("/tmp/test"),
-        )
+        if config is None:
+            config = WorkspaceConfig(
+                name="test",
+                target_path=Path("/tmp/test"),
+            )
         super().__init__(config)
         self._built = False
         self._created = False

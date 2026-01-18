@@ -14,38 +14,34 @@ class TestCreateWorkspace:
         from vcoding.functions import create_workspace
 
         workspace = create_workspace(
-            project_path=temp_dir,
+            target=temp_dir,
             name="test-workspace",
         )
 
         assert workspace is not None
         assert workspace.name == "test-workspace"
-        assert workspace.project_path == temp_dir
+        assert workspace.target_path == temp_dir
 
-    def test_create_workspace_with_config(self, temp_dir: Path) -> None:
+    def test_create_workspace_with_config(
+        self, temp_dir: Path, sample_workspace_config: WorkspaceConfig
+    ) -> None:
         """Test creating workspace with custom config."""
         from vcoding.functions import create_workspace
 
-        config = WorkspaceConfig(
-            name="custom-ws",
-            host_project_path=temp_dir,
-            virtualization_type=VirtualizationType.DOCKER,
-        )
-
         workspace = create_workspace(
-            project_path=temp_dir,
-            config=config,
+            target=temp_dir,
+            config=sample_workspace_config,
         )
 
-        assert workspace.config == config
-        assert workspace.name == "custom-ws"
+        assert workspace.config == sample_workspace_config
+        assert workspace.name == sample_workspace_config.name
 
     def test_create_workspace_with_language(self, temp_dir: Path) -> None:
         """Test creating workspace with language for templates."""
         from vcoding.functions import create_workspace
 
         workspace = create_workspace(
-            project_path=temp_dir,
+            target=temp_dir,
             name="py-workspace",
             language="python",
         )
@@ -220,6 +216,6 @@ class TestWorkspaceContext:
         from vcoding.functions import workspace_context
 
         ctx = workspace_context(temp_dir, name="test-ctx")
-        assert ctx._project_path == temp_dir
+        assert ctx._target == temp_dir
         assert ctx._name == "test-ctx"
         assert ctx._auto_destroy is False

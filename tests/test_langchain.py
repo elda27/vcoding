@@ -53,7 +53,7 @@ class TestLangChainToolsFunctionality:
         workspace.name = "test-workspace"
         workspace.is_running = True
         workspace.manager = MagicMock()
-        workspace.manager.vcoding_dir = temp_dir / ".vcoding"
+        workspace.manager.workspace_dir = temp_dir / ".vcoding"
         workspace.git = MagicMock()
         workspace.ssh = MagicMock()
         return workspace
@@ -98,7 +98,7 @@ class TestLangChainWithMockedWorkspace:
         workspace.is_running = True
         workspace.container_id = "container-123"
         workspace.manager = MagicMock()
-        workspace.manager.vcoding_dir = temp_dir / ".vcoding"
+        workspace.manager.workspace_dir = temp_dir / ".vcoding"
         (temp_dir / ".vcoding").mkdir(parents=True, exist_ok=True)
         workspace.git = MagicMock()
         workspace.git.auto_commit_changes.return_value = "commit-hash"

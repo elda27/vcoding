@@ -1,5 +1,6 @@
 """Workspace management with virtualization integration."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -7,12 +8,19 @@ from vcoding.agents.base import AgentResult, CodeAgent
 from vcoding.agents.claudecode import ClaudeCodeAgent
 from vcoding.agents.copilot import CopilotAgent
 from vcoding.core.manager import WorkspaceManager
-from vcoding.core.types import ContainerState, VirtualizationType, WorkspaceConfig
+from vcoding.core.types import (
+    ContainerState,
+    TargetType,
+    VirtualizationType,
+    WorkspaceConfig,
+)
 from vcoding.ssh.client import SSHClient
 from vcoding.ssh.keys import SSHKeyManager
 from vcoding.virtualization.base import VirtualizationBackend
 from vcoding.virtualization.docker import DockerBackend
 from vcoding.workspace.git import GitManager
+
+logger = logging.getLogger(__name__)
 
 
 class Workspace:
@@ -25,25 +33,31 @@ class Workspace:
 
     def __init__(
         self,
-        project_path: Path,
+        target: Path,
         name: str | None = None,
         config: WorkspaceConfig | None = None,
     ) -> None:
         """Initialize workspace.
 
         Args:
-            project_path: Path to the project directory.
+            target: Path to the target file or directory.
             name: Optional workspace name.
             config: Optional workspace configuration.
         """
-        self._project_path = Path(project_path).resolve()
+        self._target_path = Path(target).resolve()
+
+        # Determine target type
+        if self._target_path.is_file():
+            self._target_type = TargetType.FILE
+        else:
+            self._target_type = TargetType.DIRECTORY
 
         if config:
             self._config = config
-            self._name = name or config.name or self._project_path.name
+            self._name = name or config.name or self._target_path.name
         else:
-            self._name = name or self._project_path.name
-            manager = WorkspaceManager.from_path(self._project_path, self._name)
+            self._name = name or self._target_path.name
+            manager = WorkspaceManager.from_target(self._target_path, self._name)
             self._config = manager.config
 
         self._manager = WorkspaceManager(self._config)
@@ -60,9 +74,20 @@ class Workspace:
         return self._name
 
     @property
+    def target_path(self) -> Path:
+        """Get target path."""
+        return self._target_path
+
+    @property
+    def target_type(self) -> TargetType:
+        """Get target type."""
+        return self._target_type
+
+    # Keep project_path for backward compatibility
+    @property
     def project_path(self) -> Path:
-        """Get project path."""
-        return self._project_path
+        """Get project path (alias for target_path)."""
+        return self._target_path
 
     @property
     def config(self) -> WorkspaceConfig:
@@ -92,7 +117,13 @@ class Workspace:
     def git(self) -> GitManager:
         """Get Git manager."""
         if self._git_manager is None:
-            self._git_manager = GitManager(self._project_path, self._config.git)
+            # For file targets, use parent directory for git
+            git_path = (
+                self._target_path.parent
+                if self._target_type == TargetType.FILE
+                else self._target_path
+            )
+            self._git_manager = GitManager(git_path, self._config.git)
         return self._git_manager
 
     @property
@@ -177,7 +208,30 @@ class Workspace:
         if not self._ssh_client.wait_for_connection(max_retries=60, retry_interval=1.0):
             raise RuntimeError("Failed to establish SSH connection to container")
 
+        # Re-sync previously synced files
+        self._resync_files()
+
         return self._container_id
+
+    def _resync_files(self) -> None:
+        """Re-sync files that were previously synced."""
+        synced_files = self._manager.get_synced_files()
+
+        for entry in synced_files:
+            source = Path(entry["source"])
+            destination = entry["destination"]
+
+            if source.exists():
+                try:
+                    self.backend.copy_to(self._container_id, source, destination)
+                    logger.debug(f"Re-synced: {source} -> {destination}")
+                except Exception as e:
+                    logger.warning(f"Failed to re-sync {source}: {e}")
+            else:
+                logger.warning(
+                    f"Synced file no longer exists: {source}. "
+                    f"Use prune_synced_files() to clean up."
+                )
 
     def stop(self, timeout: int = 10) -> None:
         """Stop the virtual environment.
@@ -196,8 +250,11 @@ class Workspace:
             self._container_id = None
             self._ssh_client = None
 
-        # Optionally clean up SSH keys
+        # Clean up SSH keys
         self.ssh_key_manager.delete_key_pair(self._name)
+
+        # Destroy workspace directory
+        self._manager.destroy()
 
     def execute(
         self,
@@ -227,17 +284,24 @@ class Workspace:
             timeout=timeout,
         )
 
-    def copy_to_container(self, local_path: Path, remote_path: str) -> None:
+    def copy_to_container(
+        self, local_path: Path, remote_path: str, record: bool = True
+    ) -> None:
         """Copy files to the container.
 
         Args:
             local_path: Local file or directory.
             remote_path: Remote destination path.
+            record: Whether to record this sync for auto-resync on restart.
         """
         if self._container_id is None:
             raise RuntimeError("Workspace not started")
 
         self.backend.copy_to(self._container_id, local_path, remote_path)
+
+        # Record sync for auto-resync on restart
+        if record:
+            self._manager.add_synced_file(local_path, remote_path)
 
     def copy_from_container(self, remote_path: str, local_path: Path) -> None:
         """Copy files from the container.
@@ -251,31 +315,52 @@ class Workspace:
 
         self.backend.copy_from(self._container_id, remote_path, local_path)
 
-    def sync_to_container(self) -> None:
-        """Sync project files to the container."""
+    def sync_to_container(self, record: bool = True) -> None:
+        """Sync target files to the container.
+
+        Args:
+            record: Whether to record this sync for auto-resync on restart.
+        """
         if self._container_id is None:
             raise RuntimeError("Workspace not started")
 
         self.backend.copy_to(
             self._container_id,
-            self._project_path,
+            self._target_path,
             self._config.docker.work_dir,
         )
+
+        if record:
+            self._manager.add_synced_file(
+                self._target_path, self._config.docker.work_dir
+            )
 
     def sync_from_container(self, target_path: Path | None = None) -> None:
         """Sync files from the container to local.
 
         Args:
-            target_path: Local destination. Uses project path if None.
+            target_path: Local destination. Uses original target path if None.
         """
         if self._container_id is None:
             raise RuntimeError("Workspace not started")
 
+        destination = target_path or self._target_path
+        if self._target_type == TargetType.FILE:
+            destination = destination.parent
+
         self.backend.copy_from(
             self._container_id,
             self._config.docker.work_dir,
-            target_path or self._manager.temp_dir,
+            destination,
         )
+
+    def prune_synced_files(self) -> list[str]:
+        """Remove records of non-existent synced files.
+
+        Returns:
+            List of removed source paths.
+        """
+        return self._manager.prune_synced_files()
 
     def get_agent(self, agent_type: str) -> CodeAgent:
         """Get a code agent.

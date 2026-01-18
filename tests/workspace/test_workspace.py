@@ -16,7 +16,7 @@ class TestWorkspace:
         """Test initialization."""
         workspace = Workspace(temp_dir, name="test-ws")
         assert workspace.name == "test-ws"
-        assert workspace.project_path == temp_dir
+        assert workspace.target_path == temp_dir
 
     def test_init_uses_directory_name(self, temp_dir: Path) -> None:
         """Test that directory name is used as workspace name."""
@@ -35,7 +35,7 @@ class TestWorkspace:
         workspace = Workspace(temp_dir, name="props-test")
 
         assert workspace.name == "props-test"
-        assert workspace.project_path == temp_dir
+        assert workspace.target_path == temp_dir
         assert workspace.config is not None
         assert workspace.manager is not None
         assert workspace.container_id is None
@@ -48,7 +48,7 @@ class TestWorkspace:
         git = workspace.git
 
         assert git is not None
-        assert git.repo_path == temp_dir
+        assert git.repo_path == workspace.target_path
 
     def test_ssh_key_manager_property(self, temp_dir: Path) -> None:
         """Test SSH key manager property."""
@@ -66,15 +66,13 @@ class TestWorkspace:
         workspace.initialize()
 
         assert workspace.manager._initialized is True
-        assert workspace.manager.vcoding_dir.exists()
+        assert workspace.manager.workspace_dir.exists()
 
-    def test_initialize_creates_git_repo(self, temp_dir: Path) -> None:
+    def test_initialize_creates_git_repo(
+        self, temp_dir: Path, sample_workspace_config: WorkspaceConfig
+    ) -> None:
         """Test that initialize creates git repo when configured."""
-        config = WorkspaceConfig(
-            name="git-test",
-            host_project_path=temp_dir,
-        )
-        workspace = Workspace(temp_dir, config=config)
+        workspace = Workspace(temp_dir, config=sample_workspace_config)
         workspace.initialize()
 
         assert workspace.git.is_initialized is True

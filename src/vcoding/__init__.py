@@ -9,7 +9,7 @@ from vcoding.core.types import (
     ContainerState,
     DockerConfig,
     GitConfig,
-    SSHConfig,
+    SshConfig,
     VirtualizationType,
     WorkspaceConfig,
 )
@@ -39,7 +39,7 @@ __all__ = [
     "ContainerState",
     "DockerConfig",
     "GitConfig",
-    "SSHConfig",
+    "SshConfig",
     "VirtualizationType",
     "Workspace",
     "WorkspaceConfig",

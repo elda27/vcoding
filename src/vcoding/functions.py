@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Any
 
 from vcoding.agents.base import AgentResult
+from vcoding.core.paths import (
+    cleanup_orphaned_workspaces,
+    find_orphaned_workspaces,
+    get_app_data_dir,
+    list_workspaces,
+)
 from vcoding.core.types import WorkspaceConfig
 from vcoding.templates.dockerfile import DockerfileTemplate
 from vcoding.templates.gitignore import GitignoreTemplate
@@ -16,7 +22,7 @@ from vcoding.workspace.workspace import Workspace
 
 
 def create_workspace(
-    project_path: str | Path,
+    target: str | Path,
     name: str | None = None,
     language: str | None = None,
     config: WorkspaceConfig | None = None,
@@ -24,7 +30,7 @@ def create_workspace(
     """Create a new workspace.
 
     Args:
-        project_path: Path to the project directory.
+        target: Path to the target file or directory.
         name: Optional workspace name.
         language: Optional programming language for template generation.
         config: Optional workspace configuration.
@@ -32,31 +38,32 @@ def create_workspace(
     Returns:
         Workspace instance.
     """
+    target_path = Path(target)
     workspace = Workspace(
-        project_path=Path(project_path),
+        target=target_path,
         name=name,
         config=config,
     )
     workspace.initialize()
 
-    # Generate templates if language specified
-    if language:
-        generate_templates(project_path, language)
+    # Generate templates if language specified and target is a directory
+    if language and target_path.is_dir():
+        generate_templates(target_path, language)
 
     return workspace
 
 
-def start_workspace(project_path: str | Path, name: str | None = None) -> Workspace:
+def start_workspace(target: str | Path, name: str | None = None) -> Workspace:
     """Start a workspace's virtual environment.
 
     Args:
-        project_path: Path to the project directory.
+        target: Path to the target file or directory.
         name: Optional workspace name.
 
     Returns:
         Started Workspace instance.
     """
-    workspace = Workspace(project_path=Path(project_path), name=name)
+    workspace = Workspace(target=Path(target), name=name)
     workspace.start()
     return workspace
 
@@ -77,7 +84,6 @@ def destroy_workspace(workspace: Workspace) -> None:
         workspace: Workspace instance to destroy.
     """
     workspace.destroy()
-    workspace.cleanup()
 
 
 def execute_command(
@@ -271,25 +277,25 @@ class workspace_context:
 
     def __init__(
         self,
-        project_path: str | Path,
+        target: str | Path,
         name: str | None = None,
         auto_destroy: bool = False,
     ) -> None:
         """Initialize workspace context.
 
         Args:
-            project_path: Path to the project directory.
+            target: Path to the target file or directory.
             name: Optional workspace name.
             auto_destroy: Whether to destroy workspace on exit.
         """
-        self._project_path = Path(project_path)
+        self._target = Path(target)
         self._name = name
         self._auto_destroy = auto_destroy
         self._workspace: Workspace | None = None
 
     def __enter__(self) -> Workspace:
         """Start workspace."""
-        self._workspace = start_workspace(self._project_path, self._name)
+        self._workspace = start_workspace(self._target, self._name)
         return self._workspace
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -299,3 +305,40 @@ class workspace_context:
                 destroy_workspace(self._workspace)
             else:
                 stop_workspace(self._workspace)
+
+
+# Workspace management utilities
+def get_vcoding_data_dir() -> Path:
+    """Get the vcoding application data directory.
+
+    Returns:
+        Path to the application data directory.
+    """
+    return get_app_data_dir()
+
+
+def list_all_workspaces() -> list[dict[str, Any]]:
+    """List all workspaces.
+
+    Returns:
+        List of workspace information dictionaries.
+    """
+    return list_workspaces()
+
+
+def find_orphaned() -> list[Path]:
+    """Find workspaces whose target paths no longer exist.
+
+    Returns:
+        List of orphaned workspace directories.
+    """
+    return find_orphaned_workspaces()
+
+
+def cleanup_orphaned() -> int:
+    """Remove orphaned workspaces.
+
+    Returns:
+        Number of removed workspaces.
+    """
+    return cleanup_orphaned_workspaces()

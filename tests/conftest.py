@@ -13,7 +13,8 @@ from vcoding.core.constant import VCODING_DOCKER_OS_DEFAULT
 from vcoding.core.types import (
     DockerConfig,
     GitConfig,
-    SSHConfig,
+    SshConfig,
+    TargetType,
     VirtualizationType,
     WorkspaceConfig,
 )
@@ -37,9 +38,11 @@ def temp_dir() -> Generator[Path, None, None]:
 @pytest.fixture
 def sample_workspace_config(temp_dir: Path) -> WorkspaceConfig:
     """Create a sample workspace configuration."""
+    workspace_dir = temp_dir / ".vcoding_workspace"
     return WorkspaceConfig(
         name="test-workspace",
-        host_project_path=temp_dir,
+        target_path=temp_dir,
+        target_type=TargetType.DIRECTORY,
         virtualization_type=VirtualizationType.DOCKER,
         docker=DockerConfig(
             base_image=VCODING_DOCKER_OS_DEFAULT,
@@ -48,7 +51,7 @@ def sample_workspace_config(temp_dir: Path) -> WorkspaceConfig:
             work_dir="/workspace",
             user="vcoding",
         ),
-        ssh=SSHConfig(
+        ssh=SshConfig(
             host="localhost",
             port=2222,
             username="vcoding",
@@ -58,6 +61,7 @@ def sample_workspace_config(temp_dir: Path) -> WorkspaceConfig:
             auto_init=True,
             auto_commit=True,
         ),
+        workspace_dir=workspace_dir,
     )
 
 

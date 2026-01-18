@@ -7,7 +7,8 @@ from vcoding.core.types import (
     ContainerState,
     DockerConfig,
     GitConfig,
-    SSHConfig,
+    SshConfig,
+    TargetType,
     VirtualizationType,
     WorkspaceConfig,
 )
@@ -50,7 +51,7 @@ class TestSSHConfig:
 
     def test_default_values(self) -> None:
         """Test default SSH configuration values."""
-        config = SSHConfig()
+        config = SshConfig()
         assert config.host == "localhost"
         assert config.port == 22
         assert config.username == "vcoding"
@@ -59,7 +60,7 @@ class TestSSHConfig:
 
     def test_custom_values(self) -> None:
         """Test custom SSH configuration values."""
-        config = SSHConfig(
+        config = SshConfig(
             host="192.168.1.100",
             port=2222,
             username="testuser",
@@ -124,37 +125,53 @@ class TestWorkspaceConfig:
 
     def test_minimal_config(self, temp_dir: Path) -> None:
         """Test minimal workspace configuration."""
+        workspace_dir = temp_dir / ".vcoding_workspace"
         config = WorkspaceConfig(
             name="test",
-            host_project_path=temp_dir,
+            target_path=temp_dir,
+            workspace_dir=workspace_dir,
         )
         assert config.name == "test"
-        assert config.host_project_path == temp_dir
+        assert config.target_path == temp_dir
+        assert config.target_type == TargetType.DIRECTORY
         assert config.virtualization_type == VirtualizationType.DOCKER
-        assert config.temp_dir == temp_dir / ".vcoding"
 
     def test_string_path_conversion(self, temp_dir: Path) -> None:
         """Test that string paths are converted to Path objects."""
+        workspace_dir = temp_dir / ".vcoding_workspace"
         config = WorkspaceConfig(
             name="test",
-            host_project_path=str(temp_dir),  # type: ignore
+            target_path=str(temp_dir),  # type: ignore
+            workspace_dir=workspace_dir,
         )
-        assert isinstance(config.host_project_path, Path)
+        assert isinstance(config.target_path, Path)
 
     def test_full_config(self, temp_dir: Path) -> None:
         """Test full workspace configuration."""
-        custom_temp = temp_dir / "custom_temp"
+        workspace_dir = temp_dir / ".vcoding_workspace"
         config = WorkspaceConfig(
             name="full-test",
-            host_project_path=temp_dir,
+            target_path=temp_dir,
+            target_type=TargetType.DIRECTORY,
             virtualization_type=VirtualizationType.DOCKER,
             docker=DockerConfig(base_image="alpine:latest"),
-            ssh=SSHConfig(port=2222),
+            ssh=SshConfig(port=2222),
             git=GitConfig(auto_commit=False),
-            temp_dir=custom_temp,
+            workspace_dir=workspace_dir,
         )
         assert config.name == "full-test"
         assert config.docker.base_image == "alpine:latest"
         assert config.ssh.port == 2222
         assert config.git.auto_commit is False
-        assert config.temp_dir == custom_temp
+        assert config.workspace_dir == workspace_dir
+
+    def test_file_target_type(self, temp_dir: Path) -> None:
+        """Test file target type configuration."""
+        workspace_dir = temp_dir / ".vcoding_workspace"
+        config = WorkspaceConfig(
+            name="file-test",
+            target_path=temp_dir / "test.py",
+            target_type=TargetType.FILE,
+            workspace_dir=workspace_dir,
+        )
+        assert config.target_type == TargetType.FILE
