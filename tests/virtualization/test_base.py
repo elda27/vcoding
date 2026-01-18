@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Any
 
-
 from vcoding.core.types import (
     ContainerState,
     VirtualizationType,

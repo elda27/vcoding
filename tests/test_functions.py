@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-
 from vcoding.core.types import VirtualizationType, WorkspaceConfig
 
 
