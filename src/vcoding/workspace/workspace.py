@@ -449,11 +449,69 @@ class Workspace:
         """Clean up temporary resources."""
         self._manager.cleanup()
 
+    def generate(
+        self,
+        prompt: str,
+        output: str | None = None,
+        agent: str = "copilot",
+    ) -> AgentResult:
+        """Generate code using a code agent (simplified API).
+
+        This method hides container details - paths are relative to project.
+
+        Args:
+            prompt: What to generate (e.g., "Create a fibonacci function").
+            output: Output file path relative to project (e.g., "fibonacci.py").
+            agent: Agent to use ("copilot" or "claudecode").
+
+        Returns:
+            AgentResult with execution results.
+
+        Example:
+            ws.generate("Create a fibonacci function", output="fibonacci.py")
+        """
+        options = {}
+        if output:
+            # Convert relative path to container path
+            container_path = f"{self._config.docker.work_dir}/{output}"
+            options["output_file"] = container_path
+
+        return self.run_agent(agent, prompt, options=options)
+
+    def run(
+        self,
+        command: str,
+        timeout: int | None = None,
+    ) -> tuple[int, str, str]:
+        """Run a command in the workspace (simplified API).
+
+        Working directory is automatically set to the project root.
+
+        Args:
+            command: Command to execute.
+            timeout: Optional timeout in seconds.
+
+        Returns:
+            Tuple of (exit_code, stdout, stderr).
+
+        Example:
+            exit_code, stdout, stderr = ws.run("python fibonacci.py")
+        """
+        return self.execute(
+            command,
+            workdir=self._config.docker.work_dir,
+            timeout=timeout,
+        )
+
     def __enter__(self) -> "Workspace":
         """Context manager entry."""
         self.start()
+        self.sync_to_container()
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit."""
+        if exc_type is None:
+            # Only sync back if no exception occurred
+            self.sync_from_container()
         self.stop()

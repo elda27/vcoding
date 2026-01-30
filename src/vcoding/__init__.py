@@ -14,14 +14,20 @@ from vcoding.core.types import (
     WorkspaceConfig,
 )
 from vcoding.functions import (
+    cleanup_orphaned,
     commit_changes,
     create_workspace,
     destroy_workspace,
     execute_command,
     extend_dockerfile,
+    find_orphaned,
+    generate,
     generate_templates,
     get_commits,
+    get_vcoding_data_dir,
+    list_all_workspaces,
     rollback,
+    run,
     run_agent,
     start_workspace,
     stop_workspace,
@@ -43,28 +49,37 @@ __all__ = [
     "VirtualizationType",
     "Workspace",
     "WorkspaceConfig",
-    # Functions
-    "commit_changes",
+    # One-shot functions (simple API)
+    "generate",
+    "run",
+    # Context manager
+    "workspace_context",
+    # Workspace lifecycle functions
     "create_workspace",
+    "start_workspace",
+    "stop_workspace",
     "destroy_workspace",
+    # Workspace operations
+    "commit_changes",
     "execute_command",
-    "extend_dockerfile",
-    "generate_templates",
     "get_commits",
     "rollback",
     "run_agent",
-    "start_workspace",
-    "stop_workspace",
     "sync_from_workspace",
     "sync_to_workspace",
-    "workspace_context",
+    # Template functions
+    "extend_dockerfile",
+    "generate_templates",
+    # Workspace management utilities
+    "cleanup_orphaned",
+    "find_orphaned",
+    "get_vcoding_data_dir",
+    "list_all_workspaces",
 ]
 
 
 def main() -> None:
     """CLI entry point."""
-    import sys
-
     print("vcoding - Virtualized development environment orchestration tool")
     print(f"Version: {__version__}")
     print()

@@ -270,15 +270,20 @@ def extend_dockerfile(
 class workspace_context:
     """Context manager for workspace lifecycle.
 
+    Automatically handles start/stop and file syncing.
+
     Example:
         with workspace_context("/path/to/project") as ws:
-            ws.execute("echo hello")
+            ws.generate("Create a hello function", output="hello.py")
+            ws.run("python hello.py")
     """
 
     def __init__(
         self,
         target: str | Path,
         name: str | None = None,
+        language: str | None = None,
+        auto_sync: bool = True,
         auto_destroy: bool = False,
     ) -> None:
         """Initialize workspace context.
@@ -286,21 +291,34 @@ class workspace_context:
         Args:
             target: Path to the target file or directory.
             name: Optional workspace name.
+            language: Optional language for template generation.
+            auto_sync: Whether to auto-sync files on enter/exit.
             auto_destroy: Whether to destroy workspace on exit.
         """
         self._target = Path(target)
         self._name = name
+        self._language = language
+        self._auto_sync = auto_sync
         self._auto_destroy = auto_destroy
         self._workspace: Workspace | None = None
 
     def __enter__(self) -> Workspace:
-        """Start workspace."""
-        self._workspace = start_workspace(self._target, self._name)
+        """Start workspace and sync files."""
+        self._workspace = create_workspace(
+            self._target,
+            name=self._name,
+            language=self._language,
+        )
+        self._workspace.start()
+        if self._auto_sync:
+            self._workspace.sync_to_container()
         return self._workspace
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Stop or destroy workspace."""
+        """Sync files and stop/destroy workspace."""
         if self._workspace:
+            if self._auto_sync and exc_type is None:
+                self._workspace.sync_from_container()
             if self._auto_destroy:
                 destroy_workspace(self._workspace)
             else:
@@ -342,3 +360,72 @@ def cleanup_orphaned() -> int:
         Number of removed workspaces.
     """
     return cleanup_orphaned_workspaces()
+
+
+# =============================================================================
+# One-shot convenience functions (no manual lifecycle management needed)
+# =============================================================================
+
+
+def generate(
+    target: str | Path,
+    prompt: str,
+    output: str | None = None,
+    agent: str = "copilot",
+    language: str | None = None,
+) -> AgentResult:
+    """Generate code in a single call (one-shot API).
+
+    This function handles the entire lifecycle: workspace creation,
+    container start, file sync, agent execution, and cleanup.
+
+    Args:
+        target: Path to the project directory.
+        prompt: What to generate (e.g., "Create a fibonacci function").
+        output: Output file path relative to project (e.g., "fibonacci.py").
+        agent: Agent to use ("copilot" or "claudecode").
+        language: Optional language for template generation.
+
+    Returns:
+        AgentResult with execution results.
+
+    Example:
+        result = vcoding.generate(
+            "./my-project",
+            "Create a fibonacci function",
+            output="fibonacci.py"
+        )
+    """
+    with workspace_context(target, language=language) as ws:
+        result = ws.generate(prompt, output=output, agent=agent)
+        return result
+
+
+def run(
+    target: str | Path,
+    command: str,
+    timeout: int | None = None,
+    language: str | None = None,
+) -> tuple[int, str, str]:
+    """Run a command in a single call (one-shot API).
+
+    This function handles the entire lifecycle: workspace creation,
+    container start, file sync, command execution, and cleanup.
+
+    Args:
+        target: Path to the project directory.
+        command: Command to execute.
+        timeout: Optional timeout in seconds.
+        language: Optional language for template generation.
+
+    Returns:
+        Tuple of (exit_code, stdout, stderr).
+
+    Example:
+        exit_code, stdout, stderr = vcoding.run(
+            "./my-project",
+            "python fibonacci.py"
+        )
+    """
+    with workspace_context(target, language=language) as ws:
+        return ws.run(command, timeout=timeout)
