@@ -76,6 +76,12 @@ class Workspace:
         self._container_id: str | None = None
         self._agents: dict[str, CodeAgent] = {}
 
+        # Set dockerfile_path to workspace temp dir (per SPEC.md 7.3)
+        # so vcoding work files don't pollute user's project
+        dockerfile_in_temp = self._manager.temp_dir / "Dockerfile"
+        if dockerfile_in_temp.exists() and self._config.docker.dockerfile_path is None:
+            self._config.docker.dockerfile_path = dockerfile_in_temp
+
     @property
     def name(self) -> str:
         """Get workspace name."""
@@ -164,14 +170,11 @@ class Workspace:
     def initialize(self) -> None:
         """Initialize the workspace.
 
-        Creates necessary directories, initializes Git if needed,
-        and prepares the environment.
+        Creates necessary directories in the vcoding app data folder.
+        Does NOT modify the user's project directory (per SPEC.md 7.3).
+        Git initialization happens inside the container (per SPEC.md 8.1).
         """
         self._manager.initialize()
-
-        # Initialize Git if configured
-        if self._config.git.auto_init and not self.git.is_initialized:
-            self.git.init()
 
         # Save configuration
         self._manager.save_config()
@@ -219,7 +222,54 @@ class Workspace:
         # Re-sync previously synced files
         self._resync_files()
 
+        # Initialize Git inside container if configured (per SPEC.md 8.1)
+        if self._config.git.auto_init:
+            self._init_git_in_container()
+
         return self._container_id
+
+    def _init_git_in_container(self) -> None:
+        """Initialize Git repository inside the container."""
+        if self._ssh_client is None:
+            return
+
+        work_dir = self._config.docker.work_dir
+
+        # Check if .git already exists
+        exit_code, _, _ = self._ssh_client.execute(
+            f"test -d {work_dir}/.git", timeout=10
+        )
+        if exit_code == 0:
+            # Already initialized
+            return
+
+        # Initialize git
+        self._ssh_client.execute(
+            f"cd {work_dir} && git init", timeout=30
+        )
+
+        # Configure git user (required for commits)
+        self._ssh_client.execute(
+            f'cd {work_dir} && git config user.email "vcoding@localhost"', timeout=10
+        )
+        self._ssh_client.execute(
+            f'cd {work_dir} && git config user.name "vcoding"', timeout=10
+        )
+
+        # Create .gitignore if configured
+        if self._config.git.auto_gitignore and self._config.git.default_gitignore:
+            gitignore_content = "\\n".join(self._config.git.default_gitignore)
+            self._ssh_client.execute(
+                f'cd {work_dir} && echo -e "{gitignore_content}" > .gitignore',
+                timeout=10,
+            )
+
+        # Initial commit if configured
+        if self._config.git.auto_commit:
+            self._ssh_client.execute(
+                f"cd {work_dir} && git add -A && git commit -m 'Initial commit' --allow-empty",
+                timeout=30,
+            )
 
     def _resync_files(self) -> None:
         """Re-sync files that were previously synced."""
@@ -350,11 +400,19 @@ class Workspace:
                 self._target_path, self._config.docker.work_dir
             )
 
-    def sync_from_container(self, target_path: Path | None = None) -> None:
+    def sync_from_container(
+        self,
+        target_path: Path | None = None,
+        files: list[str] | None = None,
+    ) -> None:
         """Sync files from the container to local.
+
+        Per SPEC.md 7.3.6, only specified artifacts should be synced.
 
         Args:
             target_path: Local destination. Uses original target path if None.
+            files: List of files to sync (relative to container work_dir).
+                   If None, syncs entire work_dir (legacy behavior).
         """
         if self._container_id is None:
             raise RuntimeError("Workspace not started")
@@ -363,14 +421,27 @@ class Workspace:
         if self._target_type == TargetType.FILE:
             destination = destination.parent
 
-        # Use flatten=True to extract /workspace contents directly
-        # instead of creating destination/workspace/
-        self.backend.copy_from(
-            self._container_id,
-            self._config.docker.work_dir,
-            destination,
-            flatten=True,
-        )
+        if files:
+            # Sync only specified files (per SPEC.md 7.3.6)
+            for file_path in files:
+                remote_path = f"{self._config.docker.work_dir}/{file_path}"
+                local_path = destination / file_path
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                self.backend.copy_from(
+                    self._container_id,
+                    remote_path,
+                    local_path.parent,
+                    flatten=False,
+                )
+        else:
+            # Legacy behavior: sync entire work_dir
+            # Use flatten=True to extract /workspace contents directly
+            self.backend.copy_from(
+                self._container_id,
+                self._config.docker.work_dir,
+                destination,
+                flatten=True,
+            )
 
     def prune_synced_files(self) -> list[str]:
         """Remove records of non-existent synced files.
@@ -428,7 +499,7 @@ class Workspace:
         )
 
     def commit_changes(self, message: str | None = None) -> str | None:
-        """Commit any pending changes.
+        """Commit any pending changes inside the container.
 
         Args:
             message: Commit message.
@@ -436,10 +507,29 @@ class Workspace:
         Returns:
             Commit hash if committed, None if no changes.
         """
-        return self.git.auto_commit_changes(message or "Changes by vcoding")
+        if self._ssh_client is None:
+            raise RuntimeError("Workspace not started")
+
+        work_dir = self._config.docker.work_dir
+        msg = message or "Changes by vcoding"
+
+        # Add all and commit
+        exit_code, stdout, _ = self._ssh_client.execute(
+            f'cd {work_dir} && git add -A && git diff --cached --quiet || git commit -m "{msg}"',
+            timeout=30,
+        )
+
+        if exit_code == 0 and stdout.strip():
+            # Get the commit hash
+            _, hash_out, _ = self._ssh_client.execute(
+                f"cd {work_dir} && git rev-parse HEAD",
+                timeout=10,
+            )
+            return hash_out.strip() if hash_out else None
+        return None
 
     def rollback_to(self, commit_ref: str, hard: bool = False) -> bool:
-        """Rollback to a specific commit.
+        """Rollback to a specific commit inside the container.
 
         Args:
             commit_ref: Commit hash or reference.
@@ -448,7 +538,51 @@ class Workspace:
         Returns:
             True if successful.
         """
-        return self.git.rollback(commit_ref, hard=hard)
+        if self._ssh_client is None:
+            raise RuntimeError("Workspace not started")
+
+        work_dir = self._config.docker.work_dir
+        reset_mode = "--hard" if hard else "--mixed"
+
+        exit_code, _, _ = self._ssh_client.execute(
+            f"cd {work_dir} && git reset {reset_mode} {commit_ref}",
+            timeout=30,
+        )
+        return exit_code == 0
+
+    def list_commits(self, max_count: int = 50) -> list[dict[str, str]]:
+        """List recent commits inside the container.
+
+        Args:
+            max_count: Maximum number of commits.
+
+        Returns:
+            List of commit info dictionaries.
+        """
+        if self._ssh_client is None:
+            raise RuntimeError("Workspace not started")
+
+        work_dir = self._config.docker.work_dir
+
+        exit_code, stdout, _ = self._ssh_client.execute(
+            f'cd {work_dir} && git log --oneline -n {max_count} --format="%H|%s|%ai"',
+            timeout=30,
+        )
+
+        if exit_code != 0 or not stdout.strip():
+            return []
+
+        commits = []
+        for line in stdout.strip().split("\n"):
+            if "|" in line:
+                parts = line.split("|", 2)
+                if len(parts) >= 2:
+                    commits.append({
+                        "hash": parts[0],
+                        "message": parts[1] if len(parts) > 1 else "",
+                        "date": parts[2] if len(parts) > 2 else "",
+                    })
+        return commits
 
     def get_logs(self, tail: int | None = None) -> str:
         """Get container logs.
@@ -494,7 +628,15 @@ class Workspace:
             container_path = f"{self._config.docker.work_dir}/{output}"
             options["output_file"] = container_path
 
-        return self.run_agent(agent, prompt, options=options)
+        result = self.run_agent(agent, prompt, options=options)
+
+        # Track generated file for selective sync (per SPEC.md 7.3.6)
+        if output and result.success:
+            if not hasattr(self, "_generated_files"):
+                self._generated_files: list[str] = []
+            self._generated_files.append(output)
+
+        return result
 
     def run(
         self,

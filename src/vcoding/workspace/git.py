@@ -73,8 +73,9 @@ class GitManager:
 
         self._repo = Repo.init(self._repo_path, initial_branch=initial_branch)
 
-        # Create default .gitignore
-        self._create_default_gitignore()
+        # Create default .gitignore only if configured
+        if self._config.auto_gitignore:
+            self._create_default_gitignore()
 
         # Initial commit
         if self._config.auto_commit:

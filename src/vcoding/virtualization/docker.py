@@ -169,23 +169,9 @@ class DockerBackend(VirtualizationBackend):
 
         host_port = find_free_port()
 
-        # Prepare volumes
-        volumes = {
-            str(self._config.temp_dir): {
-                "bind": "/vcoding_temp",
-                "mode": "rw",
-            }
-        }
-
-        # Mount GitHub CLI config if enabled
-        if self._config.docker.mount_gh_config:
-            gh_config_path = self._get_gh_config_path()
-            if gh_config_path and gh_config_path.exists():
-                user = self._config.docker.user
-                volumes[str(gh_config_path)] = {
-                    "bind": f"/home/{user}/.config/gh",
-                    "mode": "ro",
-                }
+        # Per SPEC.md 7.1: Do not mount host directories directly
+        # File transfer is done via Docker API (put_archive/get_archive)
+        # Authentication is handled via environment variables
 
         # Prepare environment variables
         environment = self._get_auth_environment()
@@ -196,7 +182,6 @@ class DockerBackend(VirtualizationBackend):
             detach=True,
             auto_remove=True,
             ports={"22/tcp": host_port},
-            volumes=volumes,
             environment=environment,
             labels={
                 "vcoding.workspace": self._config.name,
@@ -265,38 +250,6 @@ class DockerBackend(VirtualizationBackend):
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
             # gh CLI not installed or not working
             pass
-
-        return None
-
-    def _get_gh_config_path(self) -> Path | None:
-        """Get the path to GitHub CLI config directory.
-
-        Returns:
-            Path to gh config directory, or None if not found.
-        """
-        import os
-        import platform
-
-        system = platform.system()
-
-        if system == "Windows":
-            # Windows: %APPDATA%\GitHub CLI or ~/.config/gh
-            appdata = os.environ.get("APPDATA")
-            if appdata:
-                gh_path = Path(appdata) / "GitHub CLI"
-                if gh_path.exists():
-                    return gh_path
-            # Fallback to ~/.config/gh
-            home = Path.home()
-            gh_path = home / ".config" / "gh"
-            if gh_path.exists():
-                return gh_path
-        else:
-            # Linux/Mac: ~/.config/gh
-            home = Path.home()
-            gh_path = home / ".config" / "gh"
-            if gh_path.exists():
-                return gh_path
 
         return None
 

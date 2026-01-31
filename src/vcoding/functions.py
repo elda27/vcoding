@@ -17,7 +17,6 @@ from vcoding.core.paths import (
 from vcoding.core.types import WorkspaceConfig
 from vcoding.templates.dockerfile import DockerfileTemplate
 from vcoding.templates.gitignore import GitignoreTemplate
-from vcoding.workspace.git import CommitInfo
 from vcoding.workspace.workspace import Workspace
 
 
@@ -47,9 +46,16 @@ def create_workspace(
     )
     workspace.initialize()
 
-    # Generate templates if language specified and target is a directory
+    # Generate Dockerfile in workspace temp dir (per SPEC.md 7.3)
+    # Do NOT generate .gitignore in project dir - that pollutes user's project
     if language and target_path.is_dir():
-        generate_templates(target_path, language)
+        generate_templates(
+            project_path=target_path,
+            language=language,
+            dockerfile=True,
+            gitignore=False,  # Don't pollute user's project
+            workspace_temp_dir=workspace.manager.temp_dir,
+        )
 
     return workspace
 
@@ -186,17 +192,17 @@ def rollback(workspace: Workspace, commit_ref: str, hard: bool = False) -> bool:
     return workspace.rollback_to(commit_ref, hard=hard)
 
 
-def get_commits(workspace: Workspace, max_count: int = 50) -> list[CommitInfo]:
-    """Get recent commits in the workspace.
+def get_commits(workspace: Workspace, max_count: int = 50) -> list[dict[str, str]]:
+    """Get recent commits in the workspace (inside container).
 
     Args:
         workspace: Workspace instance.
         max_count: Maximum number of commits.
 
     Returns:
-        List of CommitInfo.
+        List of commit info dictionaries with 'hash', 'message', 'date' keys.
     """
-    return workspace.git.list_commits(max_count)
+    return workspace.list_commits(max_count)
 
 
 def generate_templates(
@@ -204,6 +210,7 @@ def generate_templates(
     language: str,
     dockerfile: bool = True,
     gitignore: bool = True,
+    workspace_temp_dir: Path | None = None,
 ) -> dict[str, Path]:
     """Generate project templates.
 
@@ -212,6 +219,9 @@ def generate_templates(
         language: Programming language.
         dockerfile: Whether to generate Dockerfile.
         gitignore: Whether to generate .gitignore.
+        workspace_temp_dir: Path to workspace temp directory for Dockerfile.
+            If provided, Dockerfile is written here (per SPEC.md 7.3).
+            If None, Dockerfile is written to project_path (legacy behavior).
 
     Returns:
         Dictionary of generated file paths.
@@ -220,13 +230,21 @@ def generate_templates(
     generated: dict[str, Path] = {}
 
     if dockerfile:
-        dockerfile_path = project_path / "Dockerfile"
+        # Dockerfile should be in workspace temp dir per SPEC.md 7.3
+        # (vcoding work files should not pollute user's project)
+        if workspace_temp_dir:
+            workspace_temp_dir.mkdir(parents=True, exist_ok=True)
+            dockerfile_path = workspace_temp_dir / "Dockerfile"
+        else:
+            # Legacy behavior for direct API calls
+            dockerfile_path = project_path / "Dockerfile"
         if not dockerfile_path.exists():
             df_template = DockerfileTemplate.for_language(language)
             dockerfile_path.write_text(df_template.render(), encoding="utf-8")
             generated["dockerfile"] = dockerfile_path
 
     if gitignore:
+        # .gitignore belongs in the project (it's part of user's Git config)
         gitignore_path = project_path / ".gitignore"
         if not gitignore_path.exists():
             gi_template = GitignoreTemplate.for_language(language)
@@ -319,7 +337,12 @@ class workspace_context:
         """Sync files and stop/destroy workspace."""
         if self._workspace:
             if self._auto_sync and exc_type is None:
-                self._workspace.sync_from_container()
+                # Per SPEC.md 7.3.6: Only sync generated artifacts, not entire directory
+                generated_files = getattr(self._workspace, "_generated_files", None)
+                if generated_files:
+                    self._workspace.sync_from_container(files=generated_files)
+                # If no generated files tracked, don't sync anything
+                # (avoids polluting user's project with .git, __pycache__, etc.)
             if self._auto_destroy:
                 destroy_workspace(self._workspace)
             else:

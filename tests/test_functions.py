@@ -46,9 +46,12 @@ class TestCreateWorkspace:
         )
 
         assert workspace is not None
-        # Dockerfile and gitignore should be generated
-        assert (temp_dir / "Dockerfile").exists()
-        assert (temp_dir / ".gitignore").exists()
+        # Dockerfile should be in workspace temp dir (per SPEC.md 7.3)
+        assert (workspace.manager.temp_dir / "Dockerfile").exists()
+        # Dockerfile should NOT be in project directory
+        assert not (temp_dir / "Dockerfile").exists()
+        # .gitignore should NOT be auto-generated (per SPEC.md 7.3 - don't pollute project)
+        assert not (temp_dir / ".gitignore").exists()
 
 
 class TestStartStopWorkspace:
@@ -137,9 +140,10 @@ class TestGenerateTemplates:
     """Tests for generate_templates function."""
 
     def test_generate_templates(self, temp_dir: Path) -> None:
-        """Test generating templates."""
+        """Test generating templates (legacy mode without workspace_temp_dir)."""
         from vcoding.functions import generate_templates
 
+        # Legacy mode: without workspace_temp_dir, Dockerfile goes to project_path
         generated = generate_templates(
             project_path=temp_dir,
             language="python",
@@ -149,8 +153,28 @@ class TestGenerateTemplates:
         assert (temp_dir / "Dockerfile").exists()
         assert (temp_dir / ".gitignore").exists()
 
+    def test_generate_templates_with_workspace_temp_dir(self, temp_dir: Path) -> None:
+        """Test generating templates with workspace_temp_dir (per SPEC.md 7.3)."""
+        from vcoding.functions import generate_templates
+
+        workspace_temp = temp_dir / "workspace_temp"
+        project = temp_dir / "project"
+        project.mkdir()
+
+        generated = generate_templates(
+            project_path=project,
+            language="python",
+            workspace_temp_dir=workspace_temp,
+        )
+
+        # Dockerfile should be in workspace temp dir (not project)
+        assert (workspace_temp / "Dockerfile").exists()
+        assert not (project / "Dockerfile").exists()
+        # .gitignore should be in project dir
+        assert (project / ".gitignore").exists()
+
     def test_generate_templates_dockerfile_only(self, temp_dir: Path) -> None:
-        """Test generating only Dockerfile."""
+        """Test generating only Dockerfile (legacy mode)."""
         from vcoding.functions import generate_templates
 
         generated = generate_templates(

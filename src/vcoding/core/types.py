@@ -53,7 +53,6 @@ class DockerConfig(BaseModel):
     ssh_port: int = 22
     work_dir: str = "/workspace"
     user: str = "vcoding"
-    mount_gh_config: bool = True  # Mount host's GitHub CLI config for authentication
 
     model_config = {"extra": "forbid"}
 
@@ -63,6 +62,7 @@ class GitConfig(BaseModel):
 
     auto_init: bool = True
     auto_commit: bool = True
+    auto_gitignore: bool = False  # Per SPEC.md 7.3: don't pollute user's project
     default_gitignore: list[str] = Field(
         default_factory=lambda: [
             "__pycache__/",

@@ -68,14 +68,18 @@ class TestWorkspace:
         assert workspace.manager._initialized is True
         assert workspace.manager.workspace_dir.exists()
 
-    def test_initialize_creates_git_repo(
+    def test_initialize_does_not_create_git_on_host(
         self, temp_dir: Path, sample_workspace_config: WorkspaceConfig
     ) -> None:
-        """Test that initialize creates git repo when configured."""
+        """Test that initialize does NOT create git repo on host (per SPEC.md 7.3).
+        
+        Git initialization happens inside the container (SPEC.md 8.1).
+        """
         workspace = Workspace(temp_dir, config=sample_workspace_config)
         workspace.initialize()
 
-        assert workspace.git.is_initialized is True
+        # Git should NOT be initialized on host side
+        assert not (temp_dir / ".git").exists()
 
     @patch("vcoding.virtualization.docker.DockerBackend")
     def test_backend_property(
