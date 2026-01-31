@@ -9,9 +9,13 @@ This directory contains example scripts demonstrating vcoding usage.
 pip install -e .
 
 # Run an example
-python examples/01_basic_usage.py
+python examples/01_simple_oneshot_api.py
 ```
 
 ## Examples
 
-- **01_basic_usage.py** - Basic workspace creation, command execution, and file syncing
+| Example                                                | Goal                   | Description                                                                    |
+| ------------------------------------------------------ | ---------------------- | ------------------------------------------------------------------------------ |
+| [01_simple_oneshot_api.py](01_simple_oneshot_api.py)   | Simple code generation | Generate code with a single function call without lifecycle management         |
+| [02_context_manager_api.py](02_context_manager_api.py) | Multiple operations    | Use context manager for automatic resource management with multiple operations |
+| [03_advanced_api.py](03_advanced_api.py)               | Full control           | Manual workspace lifecycle management for advanced use cases                   |
