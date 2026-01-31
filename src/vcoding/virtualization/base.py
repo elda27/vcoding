@@ -121,6 +121,7 @@ class VirtualizationBackend(ABC):
         instance_id: str,
         local_path: Path,
         remote_path: str,
+        flatten: bool = False,
     ) -> None:
         """Copy files to the virtual environment.
 
@@ -128,6 +129,8 @@ class VirtualizationBackend(ABC):
             instance_id: Instance ID.
             local_path: Local file or directory path.
             remote_path: Remote destination path.
+            flatten: If True and local_path is a directory, copy contents directly
+                    to remote_path instead of creating a subdirectory.
         """
         pass
 
@@ -137,6 +140,7 @@ class VirtualizationBackend(ABC):
         instance_id: str,
         remote_path: str,
         local_path: Path,
+        flatten: bool = False,
     ) -> None:
         """Copy files from the virtual environment.
 
@@ -144,6 +148,8 @@ class VirtualizationBackend(ABC):
             instance_id: Instance ID.
             remote_path: Remote file or directory path.
             local_path: Local destination path.
+            flatten: If True and remote_path is a directory, extract contents
+                    directly to local_path instead of creating a subdirectory.
         """
         pass
 

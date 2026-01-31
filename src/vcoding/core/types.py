@@ -53,6 +53,7 @@ class DockerConfig(BaseModel):
     ssh_port: int = 22
     work_dir: str = "/workspace"
     user: str = "vcoding"
+    mount_gh_config: bool = True  # Mount host's GitHub CLI config for authentication
 
     model_config = {"extra": "forbid"}
 
@@ -85,6 +86,7 @@ class WorkspaceConfig(BaseModel):
     target_path: Path
     target_type: TargetType = TargetType.DIRECTORY
     virtualization_type: VirtualizationType = VirtualizationType.DOCKER
+    language: str | None = None
     docker: DockerConfig = Field(default_factory=DockerConfig)
     ssh: SshConfig = Field(default_factory=SshConfig)
     git: GitConfig = Field(default_factory=GitConfig)

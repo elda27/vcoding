@@ -42,6 +42,7 @@ def create_workspace(
     workspace = Workspace(
         target=target_path,
         name=name,
+        language=language,
         config=config,
     )
     workspace.initialize()

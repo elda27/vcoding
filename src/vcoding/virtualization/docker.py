@@ -6,11 +6,17 @@ from pathlib import Path
 from typing import Any
 
 import docker
-from docker.errors import NotFound
+from docker.errors import DockerException, NotFound
 from docker.models.containers import Container
 
 from vcoding.core.types import ContainerState, WorkspaceConfig
 from vcoding.virtualization.base import VirtualizationBackend
+
+
+class DockerNotAvailableError(Exception):
+    """Raised when Docker is not available or not running."""
+
+    pass
 
 
 class DockerBackend(VirtualizationBackend):
@@ -21,9 +27,18 @@ class DockerBackend(VirtualizationBackend):
 
         Args:
             config: Workspace configuration.
+
+        Raises:
+            DockerNotAvailableError: If Docker is not available or not running.
         """
         super().__init__(config)
-        self._client = docker.from_env()
+        try:
+            self._client = docker.from_env()
+        except DockerException as e:
+            raise DockerNotAvailableError(
+                "Docker is not available. Please ensure Docker Desktop is running.\n"
+                f"Original error: {e}"
+            ) from e
         self._api = self._client.api
 
     @property
@@ -93,48 +108,23 @@ class DockerBackend(VirtualizationBackend):
         Returns:
             Dockerfile content.
         """
+        from vcoding.templates.dockerfile import DockerfileTemplate
+
         user = self._config.docker.user
         work_dir = self._config.docker.work_dir
+        base_image = self._config.docker.base_image
 
-        return f"""FROM {self._config.docker.base_image}
+        template = DockerfileTemplate(
+            base_image=base_image,
+            user=user,
+            work_dir=work_dir,
+        )
 
-# Install SSH server and basic tools
-RUN apt-get update && apt-get install -y \\
-    openssh-server \\
-    sudo \\
-    git \\
-    curl \\
-    wget \\
-    vim \\
-    && rm -rf /var/lib/apt/lists/*
+        # Add language support if specified
+        if self._config.language:
+            template.with_language(self._config.language)
 
-# Configure SSH
-RUN mkdir -p /var/run/sshd
-RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
-RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-
-# Create user
-RUN useradd -m -s /bin/bash {user} && \\
-    echo "{user} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# Setup SSH directory
-RUN mkdir -p /home/{user}/.ssh && \\
-    chmod 700 /home/{user}/.ssh && \\
-    chown -R {user}:{user} /home/{user}/.ssh
-
-# Create workspace directory
-RUN mkdir -p {work_dir} && \\
-    chown -R {user}:{user} {work_dir}
-
-WORKDIR {work_dir}
-
-# Expose SSH port
-EXPOSE 22
-
-# Start SSH server
-CMD ["/usr/sbin/sshd", "-D"]
-"""
+        return template.render()
 
     def create(self, image: str | None = None) -> str:
         """Create a new Docker container.
@@ -158,18 +148,35 @@ CMD ["/usr/sbin/sshd", "-D"]
 
         host_port = find_free_port()
 
+        # Prepare volumes
+        volumes = {
+            str(self._config.temp_dir): {
+                "bind": "/vcoding_temp",
+                "mode": "rw",
+            }
+        }
+
+        # Mount GitHub CLI config if enabled
+        if self._config.docker.mount_gh_config:
+            gh_config_path = self._get_gh_config_path()
+            if gh_config_path and gh_config_path.exists():
+                user = self._config.docker.user
+                volumes[str(gh_config_path)] = {
+                    "bind": f"/home/{user}/.config/gh",
+                    "mode": "ro",
+                }
+
+        # Prepare environment variables
+        environment = self._get_auth_environment()
+
         container = self._client.containers.create(
             image=image,
             name=self.container_name,
             detach=True,
             auto_remove=True,
             ports={"22/tcp": host_port},
-            volumes={
-                str(self._config.temp_dir): {
-                    "bind": "/vcoding_temp",
-                    "mode": "rw",
-                }
-            },
+            volumes=volumes,
+            environment=environment,
             labels={
                 "vcoding.workspace": self._config.name,
                 "vcoding.managed": "true",
@@ -177,6 +184,100 @@ CMD ["/usr/sbin/sshd", "-D"]
         )
 
         return container.id
+
+    def _get_auth_environment(self) -> dict[str, str]:
+        """Get authentication environment variables to pass to container.
+
+        Checks for GitHub tokens in the host environment, or tries to get
+        token from gh CLI if authenticated.
+
+        Returns:
+            Dictionary of environment variables.
+        """
+        import os
+        import subprocess
+
+        env = {}
+
+        # Check for GitHub tokens (in order of precedence for Copilot CLI)
+        token_found = False
+        for token_name in ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]:
+            token = os.environ.get(token_name)
+            if token:
+                env[token_name] = token
+                token_found = True
+                break  # Only pass the first one found
+
+        # If no token in environment, try to get from gh CLI
+        if not token_found:
+            gh_token = self._get_gh_auth_token()
+            if gh_token:
+                env["GH_TOKEN"] = gh_token
+
+        # Also pass ANTHROPIC_API_KEY for Claude Code
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        if anthropic_key:
+            env["ANTHROPIC_API_KEY"] = anthropic_key
+
+        return env
+
+    def _get_gh_auth_token(self) -> str | None:
+        """Get GitHub token from gh CLI authentication.
+
+        This runs `gh auth token` on the host to retrieve the token
+        that was set via `gh auth login`.
+
+        Returns:
+            GitHub token string, or None if not authenticated.
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "token"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            # gh CLI not installed or not working
+            pass
+
+        return None
+
+    def _get_gh_config_path(self) -> Path | None:
+        """Get the path to GitHub CLI config directory.
+
+        Returns:
+            Path to gh config directory, or None if not found.
+        """
+        import os
+        import platform
+
+        system = platform.system()
+
+        if system == "Windows":
+            # Windows: %APPDATA%\GitHub CLI or ~/.config/gh
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                gh_path = Path(appdata) / "GitHub CLI"
+                if gh_path.exists():
+                    return gh_path
+            # Fallback to ~/.config/gh
+            home = Path.home()
+            gh_path = home / ".config" / "gh"
+            if gh_path.exists():
+                return gh_path
+        else:
+            # Linux/Mac: ~/.config/gh
+            home = Path.home()
+            gh_path = home / ".config" / "gh"
+            if gh_path.exists():
+                return gh_path
+
+        return None
 
     def start(self, instance_id: str) -> None:
         """Start a Docker container.
@@ -283,6 +384,7 @@ CMD ["/usr/sbin/sshd", "-D"]
         instance_id: str,
         local_path: Path,
         remote_path: str,
+        flatten: bool = False,
     ) -> None:
         """Copy files to container.
 
@@ -290,6 +392,8 @@ CMD ["/usr/sbin/sshd", "-D"]
             instance_id: Container ID.
             local_path: Local path.
             remote_path: Remote path.
+            flatten: If True and local_path is a directory, copy contents directly
+                    to remote_path instead of creating a subdirectory.
         """
         container = self._get_container(instance_id)
         if container is None:
@@ -298,7 +402,12 @@ CMD ["/usr/sbin/sshd", "-D"]
         # Create tar archive
         tar_buffer = io.BytesIO()
         with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
-            tar.add(local_path, arcname=Path(local_path).name)
+            if flatten and local_path.is_dir():
+                # Copy directory contents directly (without creating subdirectory)
+                for item in local_path.iterdir():
+                    tar.add(item, arcname=item.name)
+            else:
+                tar.add(local_path, arcname=Path(local_path).name)
         tar_buffer.seek(0)
 
         container.put_archive(remote_path, tar_buffer)
@@ -308,6 +417,7 @@ CMD ["/usr/sbin/sshd", "-D"]
         instance_id: str,
         remote_path: str,
         local_path: Path,
+        flatten: bool = False,
     ) -> None:
         """Copy files from container.
 
@@ -315,6 +425,8 @@ CMD ["/usr/sbin/sshd", "-D"]
             instance_id: Container ID.
             remote_path: Remote path.
             local_path: Local path.
+            flatten: If True and remote_path is a directory, extract contents
+                    directly to local_path instead of creating a subdirectory.
         """
         container = self._get_container(instance_id)
         if container is None:
@@ -328,8 +440,64 @@ CMD ["/usr/sbin/sshd", "-D"]
             tar_buffer.write(chunk)
         tar_buffer.seek(0)
 
+        # Ensure local_path exists
+        local_path.mkdir(parents=True, exist_ok=True)
+
         with tarfile.open(fileobj=tar_buffer, mode="r") as tar:
-            tar.extractall(local_path)
+            if flatten:
+                # Extract without the top-level directory
+                remote_basename = Path(remote_path).name
+                for member in tar.getmembers():
+                    # Strip the leading directory name
+                    if member.name == remote_basename:
+                        continue  # Skip the directory itself
+                    if member.name.startswith(remote_basename + "/"):
+                        member.name = member.name[len(remote_basename) + 1 :]
+                        if member.name:  # Don't extract empty names
+                            self._safe_extract_member(tar, member, local_path)
+                    else:
+                        self._safe_extract_member(tar, member, local_path)
+            else:
+                # Use filter='data' for safe extraction
+                tar.extractall(local_path, filter="data")
+
+    def _safe_extract_member(
+        self, tar: tarfile.TarFile, member: tarfile.TarInfo, path: Path
+    ) -> None:
+        """Safely extract a tar member, handling Windows permissions.
+
+        Args:
+            tar: The tar file.
+            member: The member to extract.
+            path: Destination path.
+        """
+        target_path = path / member.name
+
+        # Skip .git directory contents on Windows to avoid permission issues
+        # The git repository will be re-initialized locally if needed
+        if ".git" in member.name.split("/") or ".git" in member.name.split("\\"):
+            return
+
+        try:
+            if member.isdir():
+                target_path.mkdir(parents=True, exist_ok=True)
+            elif member.isfile():
+                # Ensure parent directory exists
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Remove existing file if it exists (Windows compat)
+                if target_path.exists():
+                    target_path.unlink()
+
+                # Extract file content
+                with tar.extractfile(member) as src:
+                    if src:
+                        target_path.write_bytes(src.read())
+            elif member.issym():
+                # Handle symlinks - on Windows, skip or create as file
+                pass
+        except (PermissionError, OSError) as e:
+            logger.warning(f"Could not extract {member.name}: {e}")
 
     def get_ssh_config(self, instance_id: str) -> dict[str, Any]:
         """Get SSH configuration for container.

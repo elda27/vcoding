@@ -35,6 +35,7 @@ class Workspace:
         self,
         target: Path,
         name: str | None = None,
+        language: str | None = None,
         config: WorkspaceConfig | None = None,
     ) -> None:
         """Initialize workspace.
@@ -42,6 +43,7 @@ class Workspace:
         Args:
             target: Path to the target file or directory.
             name: Optional workspace name.
+            language: Optional programming language for Docker image.
             config: Optional workspace configuration.
         """
         self._target_path = Path(target).resolve()
@@ -55,10 +57,16 @@ class Workspace:
         if config:
             self._config = config
             self._name = name or config.name or self._target_path.name
+            # Override language if provided
+            if language and self._config.language is None:
+                self._config.language = language
         else:
             self._name = name or self._target_path.name
             manager = WorkspaceManager.from_target(self._target_path, self._name)
             self._config = manager.config
+            # Set language if provided
+            if language:
+                self._config.language = language
 
         self._manager = WorkspaceManager(self._config)
         self._backend: VirtualizationBackend | None = None
@@ -324,10 +332,13 @@ class Workspace:
         if self._container_id is None:
             raise RuntimeError("Workspace not started")
 
+        # Use flatten=True to copy directory contents directly to /workspace
+        # instead of creating /workspace/project-name/
         self.backend.copy_to(
             self._container_id,
             self._target_path,
             self._config.docker.work_dir,
+            flatten=True,
         )
 
         if record:
@@ -348,10 +359,13 @@ class Workspace:
         if self._target_type == TargetType.FILE:
             destination = destination.parent
 
+        # Use flatten=True to extract /workspace contents directly
+        # instead of creating destination/workspace/
         self.backend.copy_from(
             self._container_id,
             self._config.docker.work_dir,
             destination,
+            flatten=True,
         )
 
     def prune_synced_files(self) -> list[str]:

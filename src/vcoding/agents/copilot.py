@@ -1,4 +1,9 @@
-"""GitHub Copilot CLI agent."""
+"""GitHub Copilot CLI agent.
+
+GitHub Copilot CLI is installed via npm as @github/copilot.
+It provides an agentic coding experience in the terminal.
+See: https://github.com/github/copilot-cli
+"""
 
 from typing import Any
 
@@ -7,7 +12,11 @@ from vcoding.ssh.client import SSHClient
 
 
 class CopilotAgent(CodeAgent):
-    """GitHub Copilot CLI agent."""
+    """GitHub Copilot CLI agent using @github/copilot.
+
+    This agent uses the official GitHub Copilot CLI which provides
+    agentic capabilities for code generation, editing, and debugging.
+    """
 
     def __init__(self, ssh_client: SSHClient) -> None:
         """Initialize Copilot agent.
@@ -25,14 +34,7 @@ class CopilotAgent(CodeAgent):
     @property
     def is_installed(self) -> bool:
         """Check if Copilot CLI is installed."""
-        return self._check_command_exists("gh") and self._check_copilot_extension()
-
-    def _check_copilot_extension(self) -> bool:
-        """Check if GitHub Copilot extension is installed."""
-        exit_code, stdout, _ = self._execute_command("gh extension list")
-        if exit_code == 0:
-            return "copilot" in stdout.lower()
-        return False
+        return self._check_command_exists("copilot")
 
     def execute(
         self,
@@ -43,37 +45,49 @@ class CopilotAgent(CodeAgent):
     ) -> AgentResult:
         """Execute Copilot CLI with a prompt.
 
+        The Copilot CLI is an interactive agent. This method runs it
+        with the prompt passed via stdin using the -p flag for non-interactive mode.
+
         Args:
             prompt: The prompt for Copilot.
             workdir: Working directory.
             context_files: Files to provide as context.
             options: Additional options.
-                - mode: "suggest" or "explain" (default: "suggest")
-                - target: "shell", "git", or "gh" (default: "shell")
+                - model: Model to use (e.g., "claude-sonnet-4", "gpt-4o")
+                - allow_all_tools: Whether to auto-approve all tools (default: True)
 
         Returns:
             AgentResult with execution results.
         """
         options = options or {}
-        mode = options.get("mode", "suggest")
-        target = options.get("target", "shell")
+        allow_all_tools = options.get("allow_all_tools", True)
+        model = options.get("model")
 
         # Create marker file for tracking modifications
         self._execute_command("touch /tmp/vcoding_marker", workdir=workdir)
 
         # Build command
-        escaped_prompt = prompt.replace('"', '\\"').replace("$", "\\$")
+        # Use -p/--prompt for prompt and --allow-all-tools for auto-approval
+        escaped_prompt = prompt.replace("'", "'\\''")
+        command = "copilot"
 
-        if mode == "explain":
-            command = f'gh copilot explain "{escaped_prompt}"'
-        else:
-            command = f'gh copilot suggest -t {target} "{escaped_prompt}"'
+        if allow_all_tools:
+            command += " --allow-all-tools"
+
+        if model:
+            command += f" --model {model}"
+
+        command += f" -p '{escaped_prompt}'"
+
+        # Get auth environment variables from options or host
+        env = options.get("env") or self._get_auth_env()
 
         # Execute
         exit_code, stdout, stderr = self._execute_command(
             command,
             workdir=workdir,
-            timeout=120,
+            env=env,
+            timeout=300,  # Longer timeout for agentic tasks
         )
 
         # Get modified files
@@ -88,50 +102,43 @@ class CopilotAgent(CodeAgent):
             stderr=stderr,
             files_modified=modified_files,
             metadata={
-                "mode": mode,
-                "target": target,
                 "prompt": prompt,
+                "model": model,
+                "allow_all_tools": allow_all_tools,
             },
         )
 
-    def suggest_command(
-        self,
-        prompt: str,
-        target: str = "shell",
-        workdir: str | None = None,
-    ) -> AgentResult:
-        """Get a command suggestion from Copilot.
+    def _get_auth_env(self) -> dict[str, str]:
+        """Get GitHub authentication environment variables from host.
 
-        Args:
-            prompt: Description of what you want to do.
-            target: Target type ("shell", "git", or "gh").
-            workdir: Working directory.
+        Checks for tokens in environment or from gh CLI.
 
         Returns:
-            AgentResult with suggested command.
+            Dictionary of environment variables.
         """
-        return self.execute(
-            prompt,
-            workdir=workdir,
-            options={"mode": "suggest", "target": target},
-        )
+        import os
+        import subprocess
 
-    def explain_command(
-        self,
-        command: str,
-        workdir: str | None = None,
-    ) -> AgentResult:
-        """Get an explanation of a command from Copilot.
+        env = {}
 
-        Args:
-            command: Command to explain.
-            workdir: Working directory.
+        # Check for GitHub tokens in environment
+        for token_name in ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]:
+            token = os.environ.get(token_name)
+            if token:
+                env[token_name] = token
+                return env
 
-        Returns:
-            AgentResult with explanation.
-        """
-        return self.execute(
-            command,
-            workdir=workdir,
-            options={"mode": "explain"},
-        )
+        # Try to get token from gh CLI
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "token"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                env["GH_TOKEN"] = result.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+
+        return env

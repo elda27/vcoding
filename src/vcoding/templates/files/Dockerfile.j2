@@ -28,6 +28,15 @@ RUN mkdir -p /home/{{ user }}/.ssh && \
     chmod 700 /home/{{ user }}/.ssh && \
     chown -R {{ user }}:{{ user }} /home/{{ user }}/.ssh
 
+# Install Node.js (required for AI CLI tools)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install GitHub Copilot CLI (@github/copilot)
+# See: https://github.com/github/copilot-cli
+RUN npm install -g @github/copilot
+
 {% if language_setup %}
 # Language-specific setup
 {{ language_setup }}
@@ -36,11 +45,11 @@ RUN mkdir -p /home/{{ user }}/.ssh && \
 {% if additional_packages %}
 # Additional packages
 RUN apt-get update && apt-get install -y \
-{% for pkg in additional_packages %}
-    {{ pkg }}{% if not loop.last %} \{% endif %}
+    {% for pkg in additional_packages %}
+{{ pkg }}{% if not loop.last %} \{% endif %}
 
 {% endfor %}
-    && rm -rf /var/lib/apt/lists/*
+&& rm -rf /var/lib/apt/lists/*
 {% endif %}
 
 {% if custom_commands %}
