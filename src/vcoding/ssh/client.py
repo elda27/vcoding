@@ -90,6 +90,8 @@ class SSHClient:
             "-o",
             "UserKnownHostsFile=/dev/null",
             "-o",
+            "LogLevel=ERROR",
+            "-o",
             f"ConnectTimeout={self._timeout}",
             "-o",
             "BatchMode=yes",
