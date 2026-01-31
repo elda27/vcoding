@@ -44,7 +44,8 @@ def main():
     print("\n[Step 1] Generating fibonacci.py...")
     result = vcoding.generate(
         target="./my-project",
-        prompt="Create a Python function that calculates fibonacci numbers",
+        prompt="Create a Python function that calculates fibonacci numbers."
+        " it will be called fibonacci and take an integer n as input and return the nth fibonacci number.",
         output="fibonacci.py",
         language="python",  # Ensures Python is installed in the container
     )

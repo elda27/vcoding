@@ -138,6 +138,27 @@ class DockerBackend(VirtualizationBackend):
         if image is None:
             image = self.build()
 
+        # Remove existing container with same name if it exists
+        existing_container = self._get_container(self.container_name)
+        if existing_container:
+            try:
+                existing_container.stop(timeout=5)
+            except Exception:
+                pass
+            try:
+                existing_container.remove(force=True)
+            except docker.errors.APIError as e:
+                # Container might be auto-removing, wait for it to finish
+                if "removal" in str(e).lower() or "in progress" in str(e).lower():
+                    import time
+
+                    for _ in range(10):
+                        time.sleep(0.5)
+                        if self._get_container(self.container_name) is None:
+                            break
+                else:
+                    raise
+
         # Find available port
         import socket
 

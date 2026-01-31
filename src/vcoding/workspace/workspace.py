@@ -228,10 +228,14 @@ class Workspace:
         for entry in synced_files:
             source = Path(entry["source"])
             destination = entry["destination"]
+            # Use flatten if this was the main sync (source is target_path)
+            flatten = source == self._target_path
 
             if source.exists():
                 try:
-                    self.backend.copy_to(self._container_id, source, destination)
+                    self.backend.copy_to(
+                        self._container_id, source, destination, flatten=flatten
+                    )
                     logger.debug(f"Re-synced: {source} -> {destination}")
                 except Exception as e:
                     logger.warning(f"Failed to re-sync {source}: {e}")
