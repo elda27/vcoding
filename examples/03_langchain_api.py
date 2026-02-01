@@ -9,9 +9,9 @@ This example demonstrates:
 
 Prerequisites:
 - Docker Desktop must be running
-- langchain and langchain-google-genai must be installed:
-    pip install langchain langchain-google-genai
-- GOOGLE_API_KEY environment variable must be set (for Google Gemini)
+- langchain and langchain-openai must be installed:
+    pip install langchain langchain-openai
+- OPENAI_API_KEY environment variable must be set
 """
 
 import os
@@ -23,11 +23,11 @@ from vcoding.langchain import get_langchain_tools
 # Import LangChain components
 try:
     from langchain.agents import create_agent
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_openai import ChatOpenAI
 except ImportError as e:
     print(f"\n[ERROR] Required packages not installed: {e}")
     print("Please install them with:")
-    print("  pip install langchain langchain-google-genai")
+    print("  pip install langchain langchain-openai")
 
 
 def main():
@@ -53,12 +53,9 @@ def main():
         # Step 2: Create LangChain agent using create_agent (modern API)
         print("\n[Step 2] Creating LangChain agent...")
 
-        # Create Google Gemini model
-        model = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
-
         # Create agent with create_agent (built on LangGraph)
         agent = create_agent(
-            model=model,
+            model="openai:gpt-5-mini",
             tools=tools,
             system_prompt=(
                 "You are a helpful coding assistant with access to a virtual environment. "

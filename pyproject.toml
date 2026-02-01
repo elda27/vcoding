@@ -31,7 +31,7 @@ dev = [
     "types-docker>=7.1.0.20260109",
 ]
 example = [
-    "langchain-google-genai>=4.2.0",
+    "langchain-openai>=1.1.7",
 ]
 langchain = [
     "langchain>=1.2.4",
