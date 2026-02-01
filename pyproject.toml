@@ -30,6 +30,9 @@ dev = [
     "ty>=0.0.12",
     "types-docker>=7.1.0.20260109",
 ]
+example = [
+    "langchain-google-genai>=4.2.0",
+]
 langchain = [
     "langchain>=1.2.4",
 ]
