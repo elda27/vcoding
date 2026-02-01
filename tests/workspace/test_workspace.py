@@ -72,7 +72,7 @@ class TestWorkspace:
         self, temp_dir: Path, sample_workspace_config: WorkspaceConfig
     ) -> None:
         """Test that initialize does NOT create git repo on host (per SPEC.md 7.3).
-        
+
         Git initialization happens inside the container (SPEC.md 8.1).
         """
         workspace = Workspace(temp_dir, config=sample_workspace_config)

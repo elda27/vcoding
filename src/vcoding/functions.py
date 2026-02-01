@@ -394,7 +394,6 @@ def cleanup_orphaned() -> int:
 def generate(
     target: str | Path,
     prompt: str,
-    output: str | None = None,
     agent: str = "copilot",
     language: str | None = None,
 ) -> AgentResult:
@@ -404,9 +403,8 @@ def generate(
     container start, file sync, agent execution, and cleanup.
 
     Args:
-        target: Path to the project directory.
+        target: Path to the output file (e.g., "./my-project/fibonacci.py").
         prompt: What to generate (e.g., "Create a fibonacci function").
-        output: Output file path relative to project (e.g., "fibonacci.py").
         agent: Agent to use ("copilot" or "claudecode").
         language: Optional language for template generation.
 
@@ -415,13 +413,13 @@ def generate(
 
     Example:
         result = vcoding.generate(
-            "./my-project",
-            "Create a fibonacci function",
-            output="fibonacci.py"
+            "./my-project/fibonacci.py",
+            "Create a fibonacci function"
         )
     """
-    with workspace_context(target, language=language) as ws:
-        result = ws.generate(prompt, output=output, agent=agent)
+    target_path = Path(target)
+    with workspace_context(target_path.parent, language=language) as ws:
+        result = ws.generate(prompt, output=str(target_path), agent=agent)
         return result
 
 

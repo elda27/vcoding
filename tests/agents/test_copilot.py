@@ -51,46 +51,44 @@ class TestCopilotAgent:
     def test_is_installed_no_copilot_extension(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test is_installed when Copilot extension is not installed."""
-        mock_ssh_client.execute.side_effect = [
-            (0, "/usr/bin/gh", ""),  # which gh
-            (0, "gh-actions\ngh-pr\n", ""),  # gh extension list (no copilot)
-        ]
+        """Test is_installed when Copilot CLI is not installed."""
+        # Implementation uses 'which copilot' to check installation
+        mock_ssh_client.execute.return_value = (1, "", "not found")
 
         assert agent.is_installed is False
 
     def test_execute_suggest(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test execute with suggest mode."""
+        """Test execute with prompt."""
         mock_ssh_client.execute.side_effect = [
             (0, "", ""),  # touch marker
-            (0, "git status", ""),  # copilot suggest
+            (0, "git status", ""),  # copilot command
         ]
 
-        result = agent.execute("show git status", options={"mode": "suggest"})
+        result = agent.execute("show git status")
 
         assert result.success is True
-        assert result.metadata["mode"] == "suggest"
+        assert result.metadata["prompt"] == "show git status"
 
     def test_execute_explain(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test execute with explain mode."""
+        """Test execute with model option."""
         mock_ssh_client.execute.side_effect = [
             (0, "", ""),  # touch marker
-            (0, "This command shows...", ""),  # copilot explain
+            (0, "This command shows...", ""),  # copilot command
         ]
 
-        result = agent.execute("git status", options={"mode": "explain"})
+        result = agent.execute("git status", options={"model": "gpt-4o"})
 
         assert result.success is True
-        assert result.metadata["mode"] == "explain"
+        assert result.metadata["model"] == "gpt-4o"
 
     def test_execute_default_mode(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test execute with default mode (suggest)."""
+        """Test execute with default options."""
         mock_ssh_client.execute.side_effect = [
             (0, "", ""),
             (0, "", ""),
@@ -98,20 +96,20 @@ class TestCopilotAgent:
 
         result = agent.execute("test prompt")
 
-        assert result.metadata["mode"] == "suggest"
+        assert result.metadata["allow_all_tools"] is True
 
-    def test_execute_with_target(
+    def test_execute_with_allow_all_tools_false(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test execute with specific target."""
+        """Test execute with allow_all_tools set to False."""
         mock_ssh_client.execute.side_effect = [
             (0, "", ""),
             (0, "", ""),
         ]
 
-        result = agent.execute("list branches", options={"target": "git"})
+        result = agent.execute("list branches", options={"allow_all_tools": False})
 
-        assert result.metadata["target"] == "git"
+        assert result.metadata["allow_all_tools"] is False
 
     def test_execute_failure(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
@@ -127,33 +125,35 @@ class TestCopilotAgent:
         assert result.success is False
         assert result.exit_code == 1
 
-    def test_suggest_command(
+    def test_execute_with_model(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test suggest_command helper method."""
+        """Test execute with model option."""
         mock_ssh_client.execute.side_effect = [
             (0, "", ""),
             (0, "ls -la", ""),
         ]
 
-        result = agent.suggest_command("list files in detail", target="shell")
+        result = agent.execute(
+            "list files in detail", options={"model": "claude-sonnet-4"}
+        )
 
         assert result.success is True
-        assert result.metadata["target"] == "shell"
+        assert result.metadata["model"] == "claude-sonnet-4"
 
-    def test_explain_command(
+    def test_execute_returns_prompt_in_metadata(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock
     ) -> None:
-        """Test explain_command helper method."""
+        """Test that execute returns prompt in metadata."""
         mock_ssh_client.execute.side_effect = [
             (0, "", ""),
             (0, "This lists files...", ""),
         ]
 
-        result = agent.explain_command("ls -la")
+        result = agent.execute("ls -la")
 
         assert result.success is True
-        assert result.metadata["mode"] == "explain"
+        assert result.metadata["prompt"] == "ls -la"
 
     def test_execute_escapes_prompt(
         self, agent: CopilotAgent, mock_ssh_client: MagicMock

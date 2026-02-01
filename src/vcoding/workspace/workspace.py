@@ -244,9 +244,7 @@ class Workspace:
             return
 
         # Initialize git
-        self._ssh_client.execute(
-            f"cd {work_dir} && git init", timeout=30
-        )
+        self._ssh_client.execute(f"cd {work_dir} && git init", timeout=30)
 
         # Configure git user (required for commits)
         self._ssh_client.execute(
@@ -577,11 +575,13 @@ class Workspace:
             if "|" in line:
                 parts = line.split("|", 2)
                 if len(parts) >= 2:
-                    commits.append({
-                        "hash": parts[0],
-                        "message": parts[1] if len(parts) > 1 else "",
-                        "date": parts[2] if len(parts) > 2 else "",
-                    })
+                    commits.append(
+                        {
+                            "hash": parts[0],
+                            "message": parts[1] if len(parts) > 1 else "",
+                            "date": parts[2] if len(parts) > 2 else "",
+                        }
+                    )
         return commits
 
     def get_logs(self, tail: int | None = None) -> str:

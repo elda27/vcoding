@@ -62,7 +62,9 @@ class TestGitManager:
 
     def test_init_creates_gitignore(self, temp_dir: Path) -> None:
         """Test that init creates .gitignore."""
-        config = GitConfig(default_gitignore=["*.log", "temp/"], auto_commit=False)
+        config = GitConfig(
+            default_gitignore=["*.log", "temp/"], auto_commit=False, auto_gitignore=True
+        )
         manager = GitManager(temp_dir, config)
         manager.init()
 
@@ -311,8 +313,14 @@ class TestGitManager:
         manager = GitManager(temp_dir)
         manager.init()
 
-        # Make changes
-        (temp_dir / ".gitignore").write_text("modified\n", encoding="utf-8")
+        # Create and commit a file first
+        test_file = temp_dir / "test.txt"
+        test_file.write_text("initial\n", encoding="utf-8")
+        manager.add_all()
+        manager.commit("Add test file")
+
+        # Make changes to the tracked file
+        test_file.write_text("modified\n", encoding="utf-8")
 
         result = manager.stash("Test stash")
         assert result is True

@@ -49,18 +49,20 @@ def main():
                 f"Stderr: {result1.stderr}"
             )
 
-        print("[Step 1] Generating todo.py...")
-        result2 = ws.generate("Create a todo list class", output="todo.py")
+        print("[Step 1] Generating test_fibonacci.py...")
+        result2 = ws.generate(
+            "add test for fibonacci function", output="test_fibonacci.py"
+        )
         if not result2.success:
             raise CodeGenerationError(
-                f"Failed to generate todo.py.\n"
+                f"Failed to generate test_fibonacci.py.\n"
                 f"Exit code: {result2.exit_code}\n"
                 f"Stderr: {result2.stderr}"
             )
 
         # Step 2: Run tests
         print("\n[Step 2] Running tests...")
-        exit_code, stdout, stderr = ws.run("python -m pytest")
+        exit_code, stdout, stderr = ws.run("pip install pytest && python -m pytest")
         print(f"Tests: {'passed' if exit_code == 0 else 'failed'}")
 
         if stdout:
