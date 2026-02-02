@@ -11,7 +11,6 @@ Usage:
     python -m vcoding.mcp
 """
 
-from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP

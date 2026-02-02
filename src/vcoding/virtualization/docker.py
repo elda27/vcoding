@@ -2,6 +2,7 @@
 
 import io
 import tarfile
+from logging import getLogger
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,8 @@ from docker.models.containers import Container
 
 from vcoding.core.types import ContainerState, WorkspaceConfig
 from vcoding.virtualization.base import VirtualizationBackend
+
+logger = getLogger(__name__)
 
 
 class DockerNotAvailableError(Exception):
@@ -201,7 +204,6 @@ class DockerBackend(VirtualizationBackend):
             Dictionary of environment variables.
         """
         import os
-        import subprocess
 
         env = {}
 

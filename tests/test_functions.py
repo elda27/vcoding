@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from vcoding.core.types import VirtualizationType, WorkspaceConfig
+from vcoding.core.types import WorkspaceConfig
 
 
 class TestCreateWorkspace:
@@ -161,7 +161,7 @@ class TestGenerateTemplates:
         project = temp_dir / "project"
         project.mkdir()
 
-        generated = generate_templates(
+        generated = generate_templates(  # noqa: F841
             project_path=project,
             language="python",
             workspace_temp_dir=workspace_temp,
@@ -177,7 +177,7 @@ class TestGenerateTemplates:
         """Test generating only Dockerfile (legacy mode)."""
         from vcoding.functions import generate_templates
 
-        generated = generate_templates(
+        generated = generate_templates(  # noqa: F841
             project_path=temp_dir,
             language="python",
             gitignore=False,
@@ -190,7 +190,7 @@ class TestGenerateTemplates:
         """Test generating only gitignore."""
         from vcoding.functions import generate_templates
 
-        generated = generate_templates(
+        generated = generate_templates(  # noqa: F841
             project_path=temp_dir,
             language="python",
             dockerfile=False,

@@ -14,7 +14,6 @@ Prerequisites:
 - OPENAI_API_KEY environment variable must be set
 """
 
-import os
 from pathlib import Path
 
 import vcoding
@@ -23,7 +22,6 @@ from vcoding.langchain import get_langchain_tools
 # Import LangChain components
 try:
     from langchain.agents import create_agent
-    from langchain_openai import ChatOpenAI
 except ImportError as e:
     print(f"\n[ERROR] Required packages not installed: {e}")
     print("Please install them with:")

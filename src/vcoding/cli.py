@@ -9,13 +9,11 @@ This module provides command-line interface for:
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
 import docker
 from docker.errors import DockerException
 
-from vcoding.core.paths import get_workspaces_dir, list_workspaces
-from vcoding.ssh.keys import SSHKeyManager
+from vcoding.core.paths import list_workspaces
 
 
 class EnvironmentInfo:

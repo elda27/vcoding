@@ -7,7 +7,7 @@ import pytest
 
 # Check if langchain is available before running tests
 try:
-    import langchain
+    import langchain  # noqa: F401
 
     LANGCHAIN_AVAILABLE = True
 except ImportError:

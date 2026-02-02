@@ -7,9 +7,7 @@ import pytest
 
 from vcoding.core.paths import (
     WorkspaceMetadata,
-    cleanup_orphaned_workspaces,
     compute_target_hash,
-    find_orphaned_workspaces,
     get_app_data_dir,
     get_workspace_dir,
     get_workspaces_dir,
