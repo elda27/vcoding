@@ -80,15 +80,8 @@ __all__ = [
 
 def main() -> None:
     """CLI entry point."""
-    print("vcoding - Virtualized development environment orchestration tool")
-    print(f"Version: {__version__}")
-    print()
-    print("Usage:")
-    print("  vcoding init [path]      - Initialize a new workspace")
-    print("  vcoding start [path]     - Start the workspace container")
-    print("  vcoding stop [path]      - Stop the workspace container")
-    print("  vcoding destroy [path]   - Destroy the workspace container")
-    print("  vcoding exec <command>   - Execute a command in the container")
-    print()
-    print("For more information, see the documentation or use Python API:")
-    print("  from vcoding import create_workspace, start_workspace")
+    import sys
+
+    from vcoding.cli import main as cli_main
+
+    sys.exit(cli_main())
